@@ -1,0 +1,73 @@
+<?xml version="1.0" encoding="utf-8"?>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+
+    <!--
+        مجوز اجرای سرویس در پس‌زمینه برای پخش Media
+        این مجوز برای Android های جدید لازم است.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
+
+    <!--
+        مشخص می‌کند سرویس Foreground ما برای پخش Media استفاده می‌شود.
+    -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MEDIA_PLAYBACK" />
+
+    <application
+        android:allowBackup="true"
+        android:label="@string/app_name"
+        android:supportsRtl="true"
+        android:theme="@style/AppTheme">
+
+        <!--
+            این Activity رابط کاربری اصلی برنامه روی گوشی است.
+        -->
+        <activity
+            android:name=".MainActivity"
+            android:exported="true">
+
+            <!--
+                باعث می‌شود Soren Player در لیست برنامه‌های گوشی دیده شود.
+            -->
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN" />
+                <category android:name="android.intent.category.LAUNCHER" />
+            </intent-filter>
+
+        </activity>
+
+        <!--
+            سرویس اصلی Media3.
+
+            Android Auto از این سرویس برای دسترسی به
+            کتابخانه Media و کنترل پخش استفاده می‌کند.
+        -->
+        <service
+            android:name=".PlaybackService"
+            android:exported="true"
+            android:foregroundServiceType="mediaPlayback">
+
+            <!--
+                رابط جدید Media3 برای Media Library
+            -->
+            <intent-filter>
+                <action android:name="androidx.media3.session.MediaLibraryService" />
+
+                <!--
+                    سازگاری با MediaBrowser قدیمی Android
+                -->
+                <action android:name="android.media.browse.MediaBrowserService" />
+            </intent-filter>
+
+        </service>
+
+        <!--
+            اعلام پشتیبانی از Android Auto.
+            فایل automotive_app_desc.xml را در مرحله بعد می‌سازیم.
+        -->
+        <meta-data
+            android:name="com.google.android.gms.car.application"
+            android:resource="@xml/automotive_app_desc" />
+
+    </application>
+
+</manifest>
