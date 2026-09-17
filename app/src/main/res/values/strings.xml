@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        نام برنامه.
+        رابط کاربری برنامه انگلیسی خواهد بود.
+    -->
+    <string name="app_name">Soren Player</string>
+
+</resources>
