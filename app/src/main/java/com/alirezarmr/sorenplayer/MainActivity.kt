@@ -3,6 +3,7 @@ package com.alirezarmr.sorenplayer
 import android.content.ComponentName
 import android.content.Intent
 import android.graphics.Color
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.net.Uri
 import android.os.Bundle
@@ -10,11 +11,14 @@ import android.provider.OpenableColumns
 import android.view.Gravity
 import android.view.View
 import android.widget.Button
+import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import androidx.appcompat.app.AppCompatActivity
 import androidx.core.content.ContextCompat
 import androidx.media3.common.MediaItem
+import androidx.media3.common.Player
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
 import androidx.media3.ui.PlayerView
@@ -22,9 +26,15 @@ import androidx.media3.ui.PlayerView
 /**
  * صفحه اصلی Soren Player.
  *
- * این Activity فقط رابط کاربری و کنترل MediaController را مدیریت می‌کند.
+ * در این مرحله:
+ * - Media Library
+ * - انتخاب چند فایل
+ * - Playlist
+ * - Next / Previous
+ * - رابط کاربری جدید
+ * اضافه می‌شود.
  *
- * Player اصلی داخل PlaybackService قرار دارد.
+ * Player اصلی همچنان داخل PlaybackService قرار دارد.
  */
 class MainActivity : AppCompatActivity() {
 
@@ -37,14 +47,29 @@ class MainActivity : AppCompatActivity() {
     // نمایش وضعیت Player
     private lateinit var statusText: TextView
 
-    // دکمه Play / Pause
-    private lateinit var playButton: Button
+    // نمایش زمان پخش
+    private lateinit var positionText: TextView
+
+    // نوار وضعیت ساده پخش
+    private lateinit var progressText: TextView
 
     // PlayerView برای نمایش ویدیو
     private lateinit var playerView: PlayerView
 
-    // کد انتخاب فایل
-    private val filePickerRequestCode = 300
+    // محل نمایش Library
+    private lateinit var libraryLayout: LinearLayout
+
+    // لیست فایل‌های Music
+    private val musicItems = mutableListOf<MediaItem>()
+
+    // لیست فایل‌های Video
+    private val videoItems = mutableListOf<MediaItem>()
+
+    // درخواست انتخاب فایل
+    private val filePickerRequestCode = 500
+
+    // Listener مربوط به تغییرات Player
+    private var playerListener: Player.Listener? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -52,12 +77,12 @@ class MainActivity : AppCompatActivity() {
         // ساخت رابط کاربری
         createUserInterface()
 
-        // اتصال Activity به PlaybackService
+        // اتصال به PlaybackService
         connectToPlaybackService()
     }
 
     /**
-     * ساخت رابط کاربری برنامه.
+     * ساخت رابط کاربری اصلی برنامه.
      */
     private fun createUserInterface() {
 
@@ -65,8 +90,7 @@ class MainActivity : AppCompatActivity() {
         val rootLayout = LinearLayout(this)
 
         rootLayout.orientation = LinearLayout.VERTICAL
-
-        rootLayout.setPadding(28, 28, 28, 28)
+        rootLayout.setPadding(24, 24, 24, 24)
 
         rootLayout.setBackgroundColor(
             Color.rgb(15, 23, 42)
@@ -79,20 +103,21 @@ class MainActivity : AppCompatActivity() {
         titleText.textSize = 30f
         titleText.setTextColor(Color.WHITE)
         titleText.gravity = Gravity.CENTER
+        titleText.setTypeface(null, Typeface.BOLD)
 
         rootLayout.addView(
             titleText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                55
+                48
             )
         )
 
         // زیرعنوان
         val subtitleText = TextView(this)
 
-        subtitleText.text = "Local Media Player"
-        subtitleText.textSize = 14f
+        subtitleText.text = "LOCAL MEDIA PLAYER"
+        subtitleText.textSize = 12f
         subtitleText.setTextColor(Color.LTGRAY)
         subtitleText.gravity = Gravity.CENTER
 
@@ -100,19 +125,26 @@ class MainActivity : AppCompatActivity() {
             subtitleText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                40
+                30
             )
         )
 
-        // فاصله
-        addSpace(rootLayout, 15)
+        addSpace(rootLayout, 12)
+
+        // نوار دکمه‌های Library
+        val categoryScroll = HorizontalScrollView(this)
+
+        categoryScroll.isHorizontalScrollBarEnabled = false
+
+        val categoryLayout = LinearLayout(this)
+
+        categoryLayout.orientation = LinearLayout.HORIZONTAL
 
         // دکمه Music
-        val musicButton = createMainButton("Music")
+        val musicButton = createCategoryButton("Music")
 
         musicButton.setOnClickListener {
 
-            // انتخاب فایل صوتی
             openFilePicker(
                 arrayOf(
                     "audio/mpeg",
@@ -121,14 +153,13 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        rootLayout.addView(musicButton)
+        categoryLayout.addView(musicButton)
 
         // دکمه Videos
-        val videoButton = createMainButton("Videos")
+        val videoButton = createCategoryButton("Videos")
 
         videoButton.setOnClickListener {
 
-            // انتخاب فایل ویدیویی
             openFilePicker(
                 arrayOf(
                     "video/mp4",
@@ -138,26 +169,60 @@ class MainActivity : AppCompatActivity() {
             )
         }
 
-        rootLayout.addView(videoButton)
+        categoryLayout.addView(videoButton)
 
-        // فاصله
-        addSpace(rootLayout, 18)
+        // دکمه Play All
+        val playAllButton = createCategoryButton("Play All")
 
-        // عنوان Now Playing
-        val nowPlayingTitle = TextView(this)
+        playAllButton.setOnClickListener {
 
-        nowPlayingTitle.text = "NOW PLAYING"
-        nowPlayingTitle.textSize = 16f
-        nowPlayingTitle.setTextColor(Color.WHITE)
-        nowPlayingTitle.gravity = Gravity.CENTER
+            playAllMedia()
+        }
+
+        categoryLayout.addView(playAllButton)
+
+        categoryScroll.addView(categoryLayout)
 
         rootLayout.addView(
-            nowPlayingTitle,
+            categoryScroll,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                35
+                58
             )
         )
+
+        addSpace(rootLayout, 10)
+
+        // عنوان Library
+        val libraryTitle = createSectionTitle("MEDIA LIBRARY")
+
+        rootLayout.addView(libraryTitle)
+
+        // ScrollView برای Library
+        val libraryScroll = ScrollView(this)
+
+        libraryLayout = LinearLayout(this)
+
+        libraryLayout.orientation = LinearLayout.VERTICAL
+
+        libraryScroll.addView(libraryLayout)
+
+        rootLayout.addView(
+            libraryScroll,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                0,
+                1f
+            )
+        )
+
+        addSpace(rootLayout, 10)
+
+        // عنوان Now Playing
+        val nowPlayingTitle =
+            createSectionTitle("NOW PLAYING")
+
+        rootLayout.addView(nowPlayingTitle)
 
         // PlayerView
         playerView = PlayerView(this)
@@ -180,7 +245,7 @@ class MainActivity : AppCompatActivity() {
             playerView,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                190
+                170
             )
         )
 
@@ -188,7 +253,7 @@ class MainActivity : AppCompatActivity() {
         currentMediaText = TextView(this)
 
         currentMediaText.text = "No media selected"
-        currentMediaText.textSize = 17f
+        currentMediaText.textSize = 16f
         currentMediaText.setTextColor(Color.WHITE)
         currentMediaText.gravity = Gravity.CENTER
 
@@ -196,7 +261,23 @@ class MainActivity : AppCompatActivity() {
             currentMediaText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                55
+                42
+            )
+        )
+
+        // نوار پیشرفت متنی
+        progressText = TextView(this)
+
+        progressText.text = "00:00 ───────────────── 00:00"
+        progressText.textSize = 12f
+        progressText.setTextColor(Color.LTGRAY)
+        progressText.gravity = Gravity.CENTER
+
+        rootLayout.addView(
+            progressText,
+            LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT,
+                30
             )
         )
 
@@ -204,7 +285,7 @@ class MainActivity : AppCompatActivity() {
         statusText = TextView(this)
 
         statusText.text = "Ready"
-        statusText.textSize = 13f
+        statusText.textSize = 12f
         statusText.setTextColor(Color.LTGRAY)
         statusText.gravity = Gravity.CENTER
 
@@ -212,12 +293,9 @@ class MainActivity : AppCompatActivity() {
             statusText,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                30
+                28
             )
         )
-
-        // فاصله
-        addSpace(rootLayout, 10)
 
         // کنترل‌های Player
         val controlsLayout = LinearLayout(this)
@@ -225,8 +303,9 @@ class MainActivity : AppCompatActivity() {
         controlsLayout.orientation = LinearLayout.HORIZONTAL
         controlsLayout.gravity = Gravity.CENTER
 
-        // دکمه Previous
-        val previousButton = createControlButton("Previous")
+        // Previous
+        val previousButton =
+            createControlButton("Previous")
 
         previousButton.setOnClickListener {
 
@@ -237,39 +316,47 @@ class MainActivity : AppCompatActivity() {
             previousButton,
             LinearLayout.LayoutParams(
                 0,
-                60,
+                55,
                 1f
             )
         )
 
-        // دکمه Play
-        playButton = createControlButton("Play")
+        // Play / Pause
+        val playButton =
+            createControlButton("Play")
 
         playButton.setOnClickListener {
 
-            if (mediaController?.isPlaying == true) {
+            val controller = mediaController
 
-                mediaController?.pause()
+            if (controller == null) {
+                return@setOnClickListener
+            }
+
+            if (controller.isPlaying) {
+
+                controller.pause()
 
             } else {
 
-                mediaController?.play()
+                controller.play()
             }
 
-            updatePlayButton()
+            updatePlayerState()
         }
 
         controlsLayout.addView(
             playButton,
             LinearLayout.LayoutParams(
                 0,
-                60,
+                55,
                 1f
             )
         )
 
-        // دکمه Next
-        val nextButton = createControlButton("Next")
+        // Next
+        val nextButton =
+            createControlButton("Next")
 
         nextButton.setOnClickListener {
 
@@ -280,7 +367,7 @@ class MainActivity : AppCompatActivity() {
             nextButton,
             LinearLayout.LayoutParams(
                 0,
-                60,
+                55,
                 1f
             )
         )
@@ -289,25 +376,15 @@ class MainActivity : AppCompatActivity() {
             controlsLayout,
             LinearLayout.LayoutParams(
                 LinearLayout.LayoutParams.MATCH_PARENT,
-                65
+                60
             )
         )
 
-        // فاصله
-        addSpace(rootLayout, 12)
-
-        // دکمه Folders
-        val foldersButton = createMainButton("Folders")
-
-        foldersButton.setOnClickListener {
-
-            statusText.text = "Folder browser will be added next"
-        }
-
-        rootLayout.addView(foldersButton)
-
         // نمایش صفحه
         setContentView(rootLayout)
+
+        // Library اولیه
+        refreshLibrary()
     }
 
     /**
@@ -315,7 +392,6 @@ class MainActivity : AppCompatActivity() {
      */
     private fun connectToPlaybackService() {
 
-        // مشخص کردن Service مربوط به برنامه
         val sessionToken = SessionToken(
             this,
             ComponentName(
@@ -324,57 +400,95 @@ class MainActivity : AppCompatActivity() {
             )
         )
 
-        // ایجاد MediaController
         val controllerFuture =
             MediaController.Builder(
                 this,
                 sessionToken
             ).buildAsync()
 
-        // دریافت نتیجه اتصال
         controllerFuture.addListener({
 
             try {
 
                 // دریافت MediaController
-                mediaController = controllerFuture.get()
+                mediaController =
+                    controllerFuture.get()
 
-                // اتصال PlayerView به MediaController
-                playerView.player = mediaController
+                // اتصال PlayerView
+                playerView.player =
+                    mediaController
+
+                // ایجاد Listener
+                playerListener =
+                    object : Player.Listener {
+
+                        override fun onMediaItemTransition(
+                            mediaItem: MediaItem?,
+                            reason: Int
+                        ) {
+
+                            updatePlayerState()
+                        }
+
+                        override fun onIsPlayingChanged(
+                            isPlaying: Boolean
+                        ) {
+
+                            updatePlayerState()
+                        }
+
+                        override fun onPlaybackStateChanged(
+                            playbackState: Int
+                        ) {
+
+                            updatePlayerState()
+                        }
+                    }
+
+                // اضافه کردن Listener
+                mediaController?.addListener(
+                    playerListener!!
+                )
 
                 statusText.text = "Player ready"
 
             } catch (exception: Exception) {
 
-                statusText.text = "Player connection failed"
+                statusText.text =
+                    "Player connection failed"
             }
 
         }, ContextCompat.getMainExecutor(this))
     }
 
     /**
-     * باز کردن File Picker.
+     * باز کردن File Picker برای انتخاب چند فایل.
      */
     private fun openFilePicker(
         mimeTypes: Array<String>
     ) {
 
-        // ایجاد Intent انتخاب فایل
-        val intent = Intent(Intent.ACTION_OPEN_DOCUMENT)
+        val intent =
+            Intent(Intent.ACTION_OPEN_DOCUMENT)
 
-        // فقط فایل‌های قابل باز شدن
-        intent.addCategory(Intent.CATEGORY_OPENABLE)
+        intent.addCategory(
+            Intent.CATEGORY_OPENABLE
+        )
 
-        // استفاده از MIME Type
         intent.type = "*/*"
 
-        // مشخص کردن انواع فایل
+        // اجازه انتخاب چند فایل
+        intent.putExtra(
+            Intent.EXTRA_ALLOW_MULTIPLE,
+            true
+        )
+
+        // مشخص کردن نوع فایل‌ها
         intent.putExtra(
             Intent.EXTRA_MIME_TYPES,
             mimeTypes
         )
 
-        // اجرای File Picker
         startActivityForResult(
             intent,
             filePickerRequestCode
@@ -382,77 +496,107 @@ class MainActivity : AppCompatActivity() {
     }
 
     /**
-     * دریافت فایل انتخاب‌شده.
+     * دریافت نتیجه File Picker.
      */
     override fun onActivityResult(
         requestCode: Int,
         resultCode: Int,
         data: Intent?
     ) {
+
         super.onActivityResult(
             requestCode,
             resultCode,
             data
         )
 
-        // بررسی نتیجه انتخاب فایل
         if (
-            requestCode == filePickerRequestCode &&
-            resultCode == RESULT_OK &&
-            data?.data != null
+            requestCode != filePickerRequestCode ||
+            resultCode != RESULT_OK ||
+            data == null
         ) {
-
-            // دریافت URI فایل
-            val fileUri = data.data!!
-
-            // دریافت نام فایل
-            val fileName = getFileName(fileUri)
-
-            // نمایش نام فایل
-            currentMediaText.text = fileName
-
-            // ارسال فایل به Media3
-            playMedia(fileUri, fileName)
+            return
         }
+
+        // لیست URI های انتخاب‌شده
+        val selectedUris =
+            mutableListOf<Uri>()
+
+        // بررسی انتخاب چند فایل
+        val clipData = data.clipData
+
+        if (clipData != null) {
+
+            for (index in 0 until clipData.itemCount) {
+
+                selectedUris.add(
+                    clipData.getItemAt(index).uri
+                )
+            }
+
+        } else if (data.data != null) {
+
+            // اگر فقط یک فایل انتخاب شده باشد
+            selectedUris.add(
+                data.data!!
+            )
+        }
+
+        // اضافه کردن فایل‌ها به Library
+        for (uri in selectedUris) {
+
+            addMediaToLibrary(uri)
+        }
+
+        // به‌روزرسانی Library
+        refreshLibrary()
     }
 
     /**
-     * ارسال فایل انتخاب‌شده به Media3.
+     * اضافه کردن یک فایل به Library.
      */
-    private fun playMedia(
-        uri: Uri,
-        fileName: String
+    private fun addMediaToLibrary(
+        uri: Uri
     ) {
 
-        // بررسی آماده بودن Controller
-        val controller = mediaController
+        // دریافت نام فایل
+        val fileName =
+            getFileName(uri)
 
-        if (controller == null) {
+        // ایجاد MediaItem
+        val mediaItem =
+            MediaItem.Builder()
+                .setMediaId(uri.toString())
+                .setUri(uri)
+                .setMediaMetadata(
+                    androidx.media3.common.MediaMetadata.Builder()
+                        .setTitle(fileName)
+                        .build()
+                )
+                .build()
 
-            statusText.text = "Player is not ready"
+        // تشخیص فایل صوتی
+        if (
+            fileName.endsWith(
+                ".mp3",
+                ignoreCase = true
+            )
+        ) {
+
+            // جلوگیری از اضافه شدن تکراری
+            if (
+                musicItems.none {
+                    it.mediaId == mediaItem.mediaId
+                }
+            ) {
+
+                musicItems.add(mediaItem)
+            }
 
             return
         }
 
-        // ساخت MediaItem
-        val mediaItem = MediaItem.fromUri(uri)
-
-        // قرار دادن فایل داخل Player
-        controller.setMediaItem(mediaItem)
-
-        // آماده‌سازی Player
-        controller.prepare()
-
-        // شروع پخش
-        controller.play()
-
-        // نمایش وضعیت
-        statusText.text = "Playing"
-
-        // تغییر دکمه
-        playButton.text = "Pause"
-
-        // نمایش PlayerView برای فایل ویدیویی
+        // تشخیص فایل ویدیویی
         if (
             fileName.endsWith(
                 ".mp4",
@@ -464,67 +608,411 @@ class MainActivity : AppCompatActivity() {
             )
         ) {
 
-            playerView.visibility = View.VISIBLE
+            // جلوگیری از اضافه شدن تکراری
+            if (
+                videoItems.none {
+                    it.mediaId == mediaItem.mediaId
+                }
+            ) {
 
-        } else {
-
-            playerView.visibility = View.GONE
+                videoItems.add(mediaItem)
+            }
         }
+    }
+
+    /**
+     * بازسازی نمایش Library.
+     */
+    private fun refreshLibrary() {
+
+        // پاک کردن لیست قبلی
+        libraryLayout.removeAllViews()
+
+        // نمایش Music
+        if (musicItems.isNotEmpty()) {
+
+            libraryLayout.addView(
+                createLibraryHeader(
+                    "MUSIC"
+                )
+            )
+
+            for (item in musicItems) {
+
+                libraryLayout.addView(
+                    createMediaRow(
+                        item,
+                        false
+                    )
+                )
+            }
+        }
+
+        // نمایش Videos
+        if (videoItems.isNotEmpty()) {
+
+            libraryLayout.addView(
+                createLibraryHeader(
+                    "VIDEOS"
+                )
+            )
+
+            for (item in videoItems) {
+
+                libraryLayout.addView(
+                    createMediaRow(
+                        item,
+                        true
+                    )
+                )
+            }
+        }
+
+        // اگر Library خالی باشد
+        if (
+            musicItems.isEmpty() &&
+            videoItems.isEmpty()
+        ) {
+
+            val emptyText = TextView(this)
+
+            emptyText.text =
+                "No media files added yet"
+
+            emptyText.textSize = 15f
+            emptyText.setTextColor(Color.LTGRAY)
+            emptyText.gravity = Gravity.CENTER
+            emptyText.setPadding(
+                10,
+                30,
+                10,
+                30
+            )
+
+            libraryLayout.addView(
+                emptyText
+            )
+        }
+    }
+
+    /**
+     * ساخت عنوان Music / Videos.
+     */
+    private fun createLibraryHeader(
+        title: String
+    ): TextView {
+
+        val text = TextView(this)
+
+        text.text = title
+        text.textSize = 13f
+        text.setTextColor(Color.LTGRAY)
+        text.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+
+        text.setPadding(
+            12,
+            12,
+            12,
+            6
+        )
+
+        return text
+    }
+
+    /**
+     * ساخت ردیف Media Library.
+     */
+    private fun createMediaRow(
+        item: MediaItem,
+        isVideo: Boolean
+    ): LinearLayout {
+
+        // ردیف اصلی
+        val row = LinearLayout(this)
+
+        row.orientation =
+            LinearLayout.HORIZONTAL
+
+        row.gravity =
+            Gravity.CENTER_VERTICAL
+
+        row.setPadding(
+            12,
+            4,
+            8,
+            4
+        )
+
+        // نام فایل
+        val nameText = TextView(this)
+
+        nameText.text =
+            item.mediaMetadata.title
+                ?: "Unknown media"
+
+        nameText.textSize = 14f
+        nameText.setTextColor(Color.WHITE)
+
+        row.addView(
+            nameText,
+            LinearLayout.LayoutParams(
+                0,
+                52,
+                1f
+            )
+        )
+
+        // دکمه Play
+        val playButton =
+            createControlButton("Play")
+
+        playButton.setOnClickListener {
+
+            playSingleItem(item)
+        }
+
+        row.addView(
+            playButton,
+            LinearLayout.LayoutParams(
+                95,
+                52
+            )
+        )
+
+        return row
+    }
+
+    /**
+     * پخش یک فایل.
+     */
+    private fun playSingleItem(
+        item: MediaItem
+    ) {
+
+        val controller =
+            mediaController
+                ?: return
+
+        // قرار دادن فقط این فایل در Playlist
+        controller.setMediaItem(item)
+
+        // آماده‌سازی
+        controller.prepare()
+
+        // شروع پخش
+        controller.play()
+
+        // نمایش نام فایل
+        currentMediaText.text =
+            item.mediaMetadata.title
+                ?: "Unknown media"
+
+        // نمایش PlayerView برای ویدیو
+        val name =
+            item.mediaMetadata.title
+                ?.toString()
+                ?: ""
+
+        playerView.visibility =
+            if (
+                name.endsWith(
+                    ".mp4",
+                    true
+                ) ||
+                name.endsWith(
+                    ".mkv",
+                    true
+                )
+            ) {
+                View.VISIBLE
+            } else {
+                View.GONE
+            }
+
+        updatePlayerState()
+    }
+
+    /**
+     * پخش کل Library به عنوان Playlist.
+     */
+    private fun playAllMedia() {
+
+        val controller =
+            mediaController
+                ?: return
+
+        // ساخت لیست کامل Media
+        val allItems =
+            mutableListOf<MediaItem>()
+
+        allItems.addAll(
+            musicItems
+        )
+
+        allItems.addAll(
+            videoItems
+        )
+
+        // اگر Library خالی است
+        if (allItems.isEmpty()) {
+
+            statusText.text =
+                "Library is empty"
+
+            return
+        }
+
+        // قرار دادن کل Library در Playlist
+        controller.setMediaItems(
+            allItems,
+            0,
+            0L
+        )
+
+        // آماده‌سازی
+        controller.prepare()
+
+        // شروع پخش
+        controller.play()
+
+        updatePlayerState()
+    }
+
+    /**
+     * به‌روزرسانی اطلاعات Player.
+     */
+    private fun updatePlayerState() {
+
+        val controller =
+            mediaController
+                ?: return
+
+        // MediaItem فعلی
+        val currentItem =
+            controller.currentMediaItem
+
+        if (currentItem != null) {
+
+            currentMediaText.text =
+                currentItem.mediaMetadata.title
+                    ?: "Unknown media"
+        }
+
+        // وضعیت پخش
+        statusText.text =
+            when {
+
+                controller.isPlaying ->
+                    "Playing"
+
+                controller.playbackState ==
+                    Player.STATE_BUFFERING ->
+                    "Buffering"
+
+                controller.playbackState ==
+                    Player.STATE_ENDED ->
+                    "Finished"
+
+                else ->
+                    "Paused"
+            }
+
+        // زمان فعلی
+        val position =
+            controller.currentPosition
+
+        val duration =
+            controller.duration
+
+        progressText.text =
+            "${formatTime(position)} ──────────────── ${formatTime(duration)}"
+    }
+
+    /**
+     * تبدیل میلی‌ثانیه به MM:SS.
+     */
+    private fun formatTime(
+        milliseconds: Long
+    ): String {
+
+        if (milliseconds < 0) {
+            return "00:00"
+        }
+
+        val totalSeconds =
+            milliseconds / 1000
+
+        val minutes =
+            totalSeconds / 60
+
+        val seconds =
+            totalSeconds % 60
+
+        return String.format(
+            "%02d:%02d",
+            minutes,
+            seconds
+        )
     }
 
     /**
      * دریافت نام فایل از URI.
      */
-    private fun getFileName(uri: Uri): String {
+    private fun getFileName(
+        uri: Uri
+    ): String {
 
-        // جستجوی اطلاعات فایل
-        val cursor = contentResolver.query(
-            uri,
-            null,
-            null,
-            null,
-            null
-        )
+        val cursor =
+            contentResolver.query(
+                uri,
+                null,
+                null,
+                null,
+                null
+            )
 
         cursor?.use {
 
-            // پیدا کردن ستون نام فایل
             val nameIndex =
                 it.getColumnIndex(
                     OpenableColumns.DISPLAY_NAME
                 )
 
-            // خواندن نام فایل
             if (
                 nameIndex >= 0 &&
                 it.moveToFirst()
             ) {
 
-                return it.getString(nameIndex)
+                return it.getString(
+                    nameIndex
+                )
             }
         }
 
-        // نام جایگزین
-        return uri.lastPathSegment ?: "Unknown file"
+        return uri.lastPathSegment
+            ?: "Unknown file"
     }
 
     /**
-     * ساخت دکمه اصلی برنامه.
+     * ساخت دکمه دسته‌بندی.
      */
-    private fun createMainButton(
+    private fun createCategoryButton(
         text: String
     ): Button {
 
         val button = Button(this)
 
         button.text = text
-        button.textSize = 15f
+        button.textSize = 12f
 
         return button
     }
 
     /**
-     * ساخت دکمه‌های کنترل Player.
+     * ساخت دکمه کنترل Player.
      */
     private fun createControlButton(
         text: String
@@ -533,13 +1021,34 @@ class MainActivity : AppCompatActivity() {
         val button = Button(this)
 
         button.text = text
-        button.textSize = 13f
+        button.textSize = 11f
 
         return button
     }
 
     /**
-     * ایجاد فضای خالی بین بخش‌ها.
+     * ساخت عنوان بخش.
+     */
+    private fun createSectionTitle(
+        text: String
+    ): TextView {
+
+        val title = TextView(this)
+
+        title.text = text
+        title.textSize = 14f
+        title.setTextColor(Color.WHITE)
+        title.setTypeface(
+            null,
+            Typeface.BOLD
+        )
+        title.gravity = Gravity.CENTER
+
+        return title
+    }
+
+    /**
+     * ایجاد فضای خالی.
      */
     private fun addSpace(
         layout: LinearLayout,
@@ -557,28 +1066,17 @@ class MainActivity : AppCompatActivity() {
         )
     }
 
-    /**
-     * به‌روزرسانی متن دکمه Play / Pause.
-     */
-    private fun updatePlayButton() {
-
-        if (mediaController?.isPlaying == true) {
-
-            playButton.text = "Pause"
-
-            statusText.text = "Playing"
-
-        } else {
-
-            playButton.text = "Play"
-
-            statusText.text = "Paused"
-        }
-    }
-
     override fun onDestroy() {
 
-        // آزاد کردن MediaController
+        // حذف Listener
+        if (playerListener != null) {
+
+            mediaController?.removeListener(
+                playerListener!!
+            )
+        }
+
+        // آزاد کردن Controller
         mediaController?.release()
 
         mediaController = null
