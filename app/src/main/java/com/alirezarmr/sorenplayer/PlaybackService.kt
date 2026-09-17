@@ -11,37 +11,37 @@ import androidx.media3.session.MediaSession
 /**
  * سرویس اصلی پخش Media در Soren Player.
  *
- * این سرویس مسئول ارتباط بین ExoPlayer،
- * MediaSession و Android Auto است.
- *
- * در مراحل بعدی کتابخانه فایل‌ها را به این سرویس اضافه می‌کنیم.
+ * Player در این Service قرار دارد تا:
+ * - پخش در پس‌زمینه ادامه داشته باشد.
+ * - Activity مستقیماً مالک Player نباشد.
+ * - Android Auto بتواند از MediaSession استفاده کند.
  */
 class PlaybackService : MediaLibraryService() {
 
-    // پخش‌کننده اصلی Media3
+    // Player اصلی برنامه
     private lateinit var player: ExoPlayer
 
-    // نشست Media برای ارتباط با Android Auto و کنترلرهای Media
+    // MediaLibrarySession برای ارتباط با Android Auto و MediaController
     private lateinit var mediaSession: MediaLibrarySession
 
     override fun onCreate() {
         super.onCreate()
 
-        // ایجاد Player اصلی برنامه
+        // ایجاد ExoPlayer
         player = ExoPlayer.Builder(this)
             .setAudioAttributes(
                 AudioAttributes.Builder()
-                    .setContentType(C.AUDIO_CONTENT_TYPE_MUSIC)
+                    .setContentType(C.AUDIO_CONTENT_TYPE_MOVIE)
                     .setUsage(C.USAGE_MEDIA)
                     .build(),
                 true
             )
             .build()
 
-        // Intent برای باز کردن صفحه اصلی برنامه
+        // Intent برای باز کردن Activity اصلی
         val sessionActivityIntent = Intent(this, MainActivity::class.java)
 
-        // PendingIntent مربوط به Activity اصلی
+        // PendingIntent مربوط به Activity
         val sessionActivityPendingIntent = PendingIntent.getActivity(
             this,
             0,
@@ -62,13 +62,18 @@ class PlaybackService : MediaLibraryService() {
     /**
      * Callback مربوط به Media Library.
      *
-     * فعلاً فقط ساختار پایه را ایجاد می‌کنیم.
-     * در مراحل بعدی Browse و Search را اضافه خواهیم کرد.
+     * در مراحل بعدی:
+     * - Music
+     * - Videos
+     * - Folders
+     * - Search
+     * را به این قسمت اضافه می‌کنیم.
      */
     private class LibrarySessionCallback : MediaLibrarySession.Callback
 
     /**
-     * Android Auto از این Session برای کنترل Player استفاده می‌کند.
+     * برگرداندن Session برای MediaController
+     * و Android Auto.
      */
     override fun onGetSession(
         controllerInfo: MediaSession.ControllerInfo
