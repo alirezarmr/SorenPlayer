@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+
+    <!--
+        تم اصلی برنامه.
+        فعلاً از تم ساده AppCompat استفاده می‌کنیم.
+    -->
+    <style name="AppTheme" parent="Theme.AppCompat.DayNight.NoActionBar">
+
+        <!--
+            رنگ پس‌زمینه و ظاهر اصلی را در مراحل بعدی
+            برای رابط کاربری Soren Player تنظیم می‌کنیم.
+        -->
+
+    </style>
+
+</resources>
