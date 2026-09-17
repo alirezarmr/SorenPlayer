@@ -13,13 +13,13 @@ jobs:
 
     steps:
 
-      # دریافت سورس پروژه از GitHub
+      # دریافت سورس پروژه
       - name: Checkout
         uses: actions/checkout@v4
 
-      # نصب Java 17 برای Android Build
+      # نصب Java 17
       - name: Setup Java 17
-        uses: actions/setup-java@v4
+        uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
@@ -30,12 +30,23 @@ jobs:
         with:
           gradle-version: '8.13'
 
-      # ساخت APK نسخه Debug
+      # ساخت APK و ذخیره کامل خروجی Gradle
       - name: Build Debug APK
-        run: gradle assembleDebug
+        run: |
+          gradle assembleDebug --stacktrace --info 2>&1 | tee build.log
+          exit ${PIPESTATUS[0]}
 
-      # ذخیره APK ساخته شده به عنوان Artifact
+      # ذخیره Log حتی در صورت شکست Build
+      - name: Upload Build Log
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: SorenPlayer-build-log
+          path: build.log
+
+      # ذخیره APK در صورت موفقیت Build
       - name: Upload APK
+        if: success()
         uses: actions/upload-artifact@v4
         with:
           name: SorenPlayer-debug
